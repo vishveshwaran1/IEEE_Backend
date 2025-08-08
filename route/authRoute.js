@@ -243,19 +243,19 @@ router.put('/profile', async (req, res) => {
 
         // Update user fields - only email can be updated
 
-        // Check if email is being changed
-        if (email && email !== user.email) {
-            // Check if new email already exists
-            const existingUser = await User.findOne({ email });
-            if (existingUser) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Email already exists'
-                });
-            }
-            user.email = email;
-            user.isEmailVerified = false; // Require re-verification
-        }
+        // // Check if email is being changed
+        // if (email && email !== user.email) {
+        //     // Check if new email already exists
+        //     const existingUser = await User.findOne({ email });
+        //     if (existingUser) {
+        //         return res.status(400).json({
+        //             success: false,
+        //             message: 'Email already exists'
+        //         });
+        //     }
+        //     user.email = email;
+        //     user.isEmailVerified = false; // Require re-verification
+        // }
 
         await user.save();
 
