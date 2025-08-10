@@ -1,299 +1,92 @@
+// routes/auth.js
 const express = require('express');
-const router = express.Router();
-const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { sendOTPEmail, sendWelcomeEmail } = require('../services/emailService');
+const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
+const LoginOTP = require('../models/loginOTP'); // Assuming your model is here
+const { sendOTPEmail } = require('../services/emailService'); // Assuming your email service is here
 
-// Test endpoint
-router.get('/test', (req, res) => {
-    res.json({ message: 'Auth route is working!' });
+const router = express.Router();
+
+// Apply rate limiting to prevent abuse
+const otpLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 5, // Limit each IP to 5 OTP requests per window
+    message: { success: false, message: 'Too many OTP requests from this IP, please try again after 5 minutes' },
+    standardHeaders: true,
+    legacyHeaders: false,
 });
 
-// Send OTP for direct login
-router.post('/send-login-otp', async (req, res) => {
-    try {
-        console.log('Send login OTP request body:', req.body);
-        console.log('Content-Type:', req.headers['content-type']);
-        
-        if (!req.body) {
-            return res.status(400).json({
-                success: false,
-                message: 'Request body is missing'
-            });
-        }
-        
-        const { studentId, email } = req.body;
-
-        // Validate required fields
-        if (!studentId || !email) {
-            return res.status(400).json({
-                success: false,
-                message: 'Student ID and Email are required'
-            });
-        }
-
-        // Validate email format
-        const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Please enter a valid email address'
-            });
-        }
-
-        // Find or create user
-        let user = await User.findOne({ studentId, email });
-        
-        if (!user) {
-            // Create new user for direct login
-            user = new User({
-                studentId,
-                email,
-                isEmailVerified: false,
-                isActive: true
-            });
-        }
-
-        // Generate OTP
-        await user.generateOTP();
-
-        // Send OTP email
-        const emailSent = await sendOTPEmail(email, studentId, user.emailVerificationOTP.code);
-        
-        if (!emailSent) {
-            return res.status(500).json({
-                success: false,
-                message: 'Failed to send OTP email. Please try again.'
-            });
-        }
-        
-        res.json({
-            success: true,
-            message: 'OTP sent successfully to your email',
-            otp: process.env.NODE_ENV === 'development' ? user.emailVerificationOTP.code : undefined,
-            expiresIn: '10 minutes'
-        });
-
-    } catch (error) {
-        console.error('Send login OTP error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to send OTP',
-            error: error.message
-        });
-    }
+const verifyLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 10, // Limit each IP to 10 verification attempts per window
+    message: { success: false, message: 'Too many login attempts from this IP, please try again after 5 minutes' },
+    standardHeaders: true,
+    legacyHeaders: false,
 });
 
-// Verify OTP and login
-router.post('/verify-login-otp', async (req, res) => {
-    try {
-        console.log('Verify login OTP request body:', req.body);
-        
-        if (!req.body) {
-            return res.status(400).json({
-                success: false,
-                message: 'Request body is missing'
-            });
-        }
-        
-        const { studentId, email, otp } = req.body;
-
-        if (!studentId || !email || !otp) {
-            return res.status(400).json({
-                success: false,
-                message: 'Student ID, Email, and OTP are required'
-            });
+// --- Send OTP Route ---
+router.post(
+    '/send-login-otp',
+    otpLimiter,
+    body('email').isEmail().withMessage('Please provide a valid email address.').normalizeEmail(),
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ success: false, message: errors.array()[0].msg });
         }
 
-        // Find user
-        const user = await User.findOne({ studentId, email });
+        try {
+            const { email } = req.body;
+            const otp = crypto.randomInt(100000, 999999).toString();
 
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
-        }
-
-        // Check if OTP is expired
-        if (user.isOTPExpired()) {
-            return res.status(400).json({
-                success: false,
-                message: 'OTP has expired. Please request a new OTP'
-            });
-        }
-
-        // Check verification attempts
-        if (user.verificationAttempts >= 3) {
-            const timeDiff = Date.now() - user.lastVerificationAttempt.getTime();
-            if (timeDiff < 15 * 60 * 1000) { // 15 minutes cooldown
-                return res.status(400).json({
-                    success: false,
-                    message: 'Too many verification attempts. Please try again in 15 minutes'
-                });
-            } else {
-                user.verificationAttempts = 0;
-                await user.save();
-            }
-        }
-
-        // Verify OTP
-        const isValid = await user.verifyOTP(otp);
-
-        if (isValid) {
-            // Update last login
-            await user.updateLastLogin();
-
-            // Generate JWT token
-            const token = jwt.sign(
-                { userId: user._id, studentId: user.studentId, email: user.email, role: user.role },
-                process.env.JWT_SECRET || 'your-secret-key',
-                { expiresIn: '24h' }
+            await LoginOTP.findOneAndUpdate(
+                { email },
+                { otp, expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
             );
 
-            res.json({
-                success: true,
-                message: 'Login successful',
-                data: {
-                    user: user.toJSON(),
-                    token,
-                    isAuthenticated: true
-                }
-            });
-        } else {
-            res.status(400).json({
-                success: false,
-                message: 'Invalid OTP. Please try again'
-            });
-        }
+            await sendOTPEmail(email, otp);
 
-    } catch (error) {
-        console.error('Verify login OTP error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to verify OTP',
-            error: error.message
-        });
+            res.json({ success: true, message: 'OTP sent successfully to your email.' });
+        } catch (error) {
+            console.error('Error sending OTP:', error);
+            res.status(500).json({ success: false, message: 'An internal error occurred while sending the OTP.' });
+        }
     }
-});
+);
 
-// Get current user profile
-router.get('/profile', async (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-
-        if (!token) {
-            return res.status(401).json({
-                success: false,
-                message: 'Access token required'
-            });
+// --- Verify OTP Route ---
+router.post(
+    '/verify-login-otp',
+    verifyLimiter,
+    body('email').isEmail().normalizeEmail(),
+    body('otp').isLength({ min: 6, max: 6 }).isNumeric(),
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ success: false, message: 'Invalid format for email or OTP.' });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        const user = await User.findById(decoded.userId);
+        try {
+            const { email, otp } = req.body;
+            const otpRecord = await LoginOTP.findOne({ email, otp });
 
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
-        }
-
-        res.json({
-            success: true,
-            data: {
-                user: user.toJSON()
+            if (!otpRecord || otpRecord.expiresAt < new Date()) {
+                return res.status(400).json({ success: false, message: 'The OTP is invalid or has expired.' });
             }
-        });
 
-    } catch (error) {
-        console.error('Profile access error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to access profile',
-            error: error.message
-        });
-    }
-});
+            await LoginOTP.findByIdAndDelete(otpRecord._id);
 
-// Update user profile
-router.put('/profile', async (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
+            const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-        if (!token) {
-            return res.status(401).json({
-                success: false,
-                message: 'Access token required'
-            });
+            res.json({ success: true, message: 'Login successful!', token });
+        } catch (error) {
+            console.error('Error verifying OTP:', error);
+            res.status(500).json({ success: false, message: 'An internal error occurred during verification.' });
         }
-
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        const user = await User.findById(decoded.userId);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
-        }
-
-        const { email } = req.body;
-
-        // Update user fields - only email can be updated
-
-        // // Check if email is being changed
-        // if (email && email !== user.email) {
-        //     // Check if new email already exists
-        //     const existingUser = await User.findOne({ email });
-        //     if (existingUser) {
-        //         return res.status(400).json({
-        //             success: false,
-        //             message: 'Email already exists'
-        //         });
-        //     }
-        //     user.email = email;
-        //     user.isEmailVerified = false; // Require re-verification
-        // }
-
-        await user.save();
-
-        res.json({
-            success: true,
-            message: 'Profile updated successfully',
-            data: {
-                user: user.toJSON()
-            }
-        });
-
-    } catch (error) {
-        console.error('Profile update error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update profile',
-            error: error.message
-        });
     }
-});
-
-// Logout
-router.post('/logout', async (req, res) => {
-    try {
-        // In a stateless JWT system, logout is handled client-side
-        // by removing the token. This endpoint can be used for logging.
-        res.json({
-            success: true,
-            message: 'Logged out successfully'
-        });
-    } catch (error) {
-        console.error('Logout error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to logout',
-            error: error.message
-        });
-    }
-});
+);
 
 module.exports = router;

@@ -1,0 +1,92 @@
+// testSchema.js
+
+const mongoose = require('mongoose');
+const Application = require('./models/Application'); // Adjust the path to your model file
+
+// --- Configuration ---
+// Replace with your MongoDB connection string. Using a test database is recommended.
+const MONGO_URI = 'mongodb+srv://vichu:vichu@cluster0.h53gqai.mongodb.net/';
+
+// --- Test Data ---
+const validApplicationData = {
+    studentId: '123456789',
+    email: 'test.student@example.com',
+    firstName: 'John',
+    lastName: 'Doe',
+    phoneNo: '9876543210',
+    year: '3rd',
+    department: 'CSE',
+    projectTitle: 'A Valid Project',
+    projectIdeaDescription: 'This is a test description.',
+    projectMethodology: 'Agile',
+    fundingAmount: '10000',
+    projectStartDate: new Date('2025-09-01'),
+    projectEndDate: new Date('2025-12-31'),
+    budgetItems: [{
+        items: 'Raspberry Pi',
+        quantity: '2',
+        justification: 'For core processing.'
+    }]
+};
+
+// --- Test Runner Function ---
+const runTests = async () => {
+    try {
+        await mongoose.connect(MONGO_URI);
+        console.log('✅ Successfully connected to MongoDB.');
+
+        // Clean up the collection before starting
+        await Application.deleteMany({});
+        console.log('🧹 Collection cleaned.');
+
+        // --- Test 1: Happy Path (Creating a valid document) ---
+        console.log('\n--- Running Test 1: Create a valid application ---');
+        try {
+            const newApp = new Application(validApplicationData);
+            const savedApp = await newApp.save();
+            console.log('✅ SUCCESS: Application saved successfully!');
+            console.log(savedApp);
+        } catch (error) {
+            console.error('❌ FAILED: This should have succeeded. Error:', error.message);
+        }
+        
+        // --- Test 2: Required Field Validation ---
+        console.log('\n--- Running Test 2: Missing a required field (firstName) ---');
+        try {
+            const invalidData = { ...validApplicationData, studentId: '987654321', firstName: undefined };
+            const invalidApp = new Application(invalidData);
+            await invalidApp.save(); // This line should throw an error
+            console.error('❌ FAILED: This should have thrown a validation error.');
+        } catch (error) {
+            // We expect an error here!
+            console.log(`✅ SUCCESS: Correctly caught a validation error: "${error.errors.firstName.message}"`);
+        }
+
+        // --- Test 3: Unique Field Validation ---
+        console.log('\n--- Running Test 3: Duplicate studentId ---');
+        try {
+            // Attempt to save another application with the same studentId as the first one
+            const duplicateData = { ...validApplicationData, email: 'another.email@example.com' };
+            const duplicateApp = new Application(duplicateData);
+            await duplicateApp.save(); // This line should throw a duplicate key error
+            console.error('❌ FAILED: This should have thrown a duplicate key error.');
+        } catch (error) {
+            // We expect an error here! Check for the MongoDB duplicate key error code.
+            if (error.code === 11000) {
+                console.log('✅ SUCCESS: Correctly caught a duplicate key error for studentId.');
+            } else {
+                console.error('❌ FAILED: Caught an unexpected error:', error);
+            }
+        }
+
+    } catch (error) {
+        console.error('Database connection failed:', error);
+    } finally {
+        // Close the connection
+        await mongoose.connection.close();
+        console.log('\nConnection closed. Test finished.');
+    }
+};
+
+// --- Execute the tests ---
+runTests();
