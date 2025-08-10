@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const Application = require('../models/Application'); // Ensure this path is correct
+const Application = require('../models/application');
 const authMiddleware = require('../middleware/authMiddleware'); // Ensure this path is correct
 
 const router = express.Router();
