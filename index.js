@@ -8,7 +8,10 @@ connectDB();
 
 const app = express();
 app.use(cors({
-    origin: "http://localhost:5173", // Your React dev server
+    origin: [
+        "http://localhost:5173", // Your React dev server
+        "https://ieee-website-theta.vercel.app" // IEEE Website
+    ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
 }));

@@ -46,4 +46,10 @@ IEEE_Backend/
 - **camelCase**: `loginOTP.js`, `authRoute.js`, `authMiddleware.js`, `emailService.js`
 
 ## Status: ✅ ALL IMPORTS MATCH FILE NAMES
-All require() statements now correctly reference the actual file names with proper casing. 
+All require() statements now correctly reference the actual file names with proper casing.
+
+## CORS Configuration ✅
+- **Local Development**: `http://localhost:5173` ✅
+- **Production Frontend**: `https://ieee-website-theta.vercel.app` ✅
+- **Methods**: GET, POST, PUT, DELETE ✅
+- **Credentials**: Enabled ✅ 
