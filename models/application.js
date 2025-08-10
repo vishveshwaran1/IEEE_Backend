@@ -14,7 +14,7 @@ const ApplicationSchema = new mongoose.Schema({
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     ieeeMembershipNo: { type: String },
-    phoneNo: { type: String, required: true },
+    phoneNo: { type: String, required: true }, 
     year: { type: String, required: true },
     department: { type: String, required: true },
 
