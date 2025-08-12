@@ -12,7 +12,8 @@ app.use(cors({
         "http://localhost:5174",
         "http://localhost:5173",
         "https://ieee-sairam.netlify.app", // Your React dev server
-        "https://ieee-website-theta.vercel.app" // IEEE Website
+        "https://ieee-website-theta.vercel.app",
+        "https://ieee-frontend-jmzfhmyg6-vishveshwaran-as-projects.vercel.app/" // IEEE Website
         
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
