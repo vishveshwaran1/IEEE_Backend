@@ -9,6 +9,7 @@ connectDB();
 const app = express();
 app.use(cors({
     origin: [
+        "http://localhost:5174",
         "http://localhost:5173",
         "https://ieee-sairam.netlify.app", // Your React dev server
         "https://ieee-website-theta.vercel.app" // IEEE Website
