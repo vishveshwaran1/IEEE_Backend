@@ -9,9 +9,10 @@ connectDB();
 const app = express();
 app.use(cors({
     origin: [
-        "http://localhost:5173", // Your React dev server
-        "https://ieee-website-theta.vercel.app" ,// IEEE Website
-        "https://ieee-frontend-jmzfhmyg6-vishveshwaran-as-projects.vercel.app/"
+        "http://localhost:5173",
+        "https://ieee-sairam.netlify.app", // Your React dev server
+        "https://ieee-website-theta.vercel.app" // IEEE Website
+        
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
